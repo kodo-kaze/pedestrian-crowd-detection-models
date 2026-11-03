@@ -221,3 +221,6 @@ __marimo__/
 
 *.pt
 *.pkl
+
+models/
+models.bak/
