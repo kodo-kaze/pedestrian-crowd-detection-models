@@ -731,7 +731,8 @@ Located at [`datasets/crowdhuman_ml_dataset.csv`](file:///home/bimbok/shared/cod
 .
 ├── README.md                           # Unified Master Technical Documentation (This file)
 ├── requirements.txt                    # Core Python dependencies
-├── infer.py                            # V1 Standalone inference executable
+├── infer.py                            # V1 Standalone image inference executable
+├── infer_video.py                      # V1 Standalone video, webcam & RTSP inference executable
 │
 ├── models/
 │   ├── best.pt                         # Fine-tuned YOLO26m weights (~131 MB)
@@ -770,12 +771,27 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### Step 3: Run Inference
+### Step 3: Run Image Inference
 ```bash
 python3 infer.py input/your_test_image.jpg
 ```
-
 Predictions and probability breakdowns will display in the console, with annotated images saved automatically to `output/`.
+
+### Step 4: Run Video & Live Stream Inference
+```bash
+# 1. Process a video file (outputs marked MP4 to output/<name>_marked.mp4)
+python3 infer_video.py input/your_video.mp4
+
+# 2. Process with 50% compute savings (skip every 2nd frame)
+python3 infer_video.py input/your_video.mp4 --stride 2
+
+# 3. Real-time webcam feed with live desktop window
+python3 infer_video.py 0 --show
+
+# 4. Live CCTV / IP Camera RTSP Stream
+python3 infer_video.py rtsp://username:password@192.168.1.100:554/live --show
+```
+The script writes a new `.mp4` video with marked bounding boxes, confidence tags, and a live analytical Heads-Up Display (HUD) banner at the top of each frame.
 
 ---
 

@@ -42,8 +42,20 @@ from ultralytics import YOLO
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
-YOLO_MODEL_PATH = SCRIPT_DIR / "models/best.pt"
-RF_MODEL_PATH = SCRIPT_DIR / "models/crowd_random_forest_v1.pkl"
+def resolve_model_path(filename: str) -> Path:
+    """Find model weights across standard project directories."""
+    candidates = [
+        SCRIPT_DIR / "models" / filename,
+        SCRIPT_DIR / "pcp-model-api" / filename,
+        SCRIPT_DIR / filename,
+    ]
+    for p in candidates:
+        if p.exists():
+            return p
+    return SCRIPT_DIR / "models" / filename
+
+YOLO_MODEL_PATH = resolve_model_path("best.pt")
+RF_MODEL_PATH = resolve_model_path("crowd_random_forest_v1.pkl")
 
 CONF_THRESHOLD = 0.25
 IOU_THRESHOLD = 0.70
@@ -503,6 +515,7 @@ with open(
 ) as f:
 
     rf_model = pickle.load(f)
+rf_model.n_jobs = 1
 
 print("✅ YOLO26m loaded")
 print("✅ Random Forest loaded")

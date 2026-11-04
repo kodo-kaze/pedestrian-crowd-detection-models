@@ -225,3 +225,11 @@ __marimo__/
 models/
 models.bak/
 pcp-model-api/
+
+# Video files & outputs
+*.mp4
+*.avi
+*.mov
+*.mkv
+output/*
+!output/.gitkeep
