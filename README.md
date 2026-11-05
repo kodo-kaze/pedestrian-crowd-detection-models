@@ -733,6 +733,7 @@ Located at [`datasets/crowdhuman_ml_dataset.csv`](file:///home/bimbok/shared/cod
 ├── requirements.txt                    # Core Python dependencies
 ├── infer.py                            # V1 Standalone image inference executable
 ├── infer_video.py                      # V1 Standalone video, webcam & RTSP inference executable
+├── stream_server.py                    # V1 Real-Time FastAPI 24/7 CCTV Streaming Server
 │
 ├── models/
 │   ├── best.pt                         # Fine-tuned YOLO26m weights (~131 MB)
@@ -777,7 +778,7 @@ python3 infer.py input/your_test_image.jpg
 ```
 Predictions and probability breakdowns will display in the console, with annotated images saved automatically to `output/`.
 
-### Step 4: Run Video & Live Stream Inference
+### Step 4: Run Video & File Processing
 ```bash
 # 1. Process a video file (outputs marked MP4 to output/<name>_marked.mp4)
 python3 infer_video.py input/your_video.mp4
@@ -787,11 +788,27 @@ python3 infer_video.py input/your_video.mp4 --stride 2
 
 # 3. Real-time webcam feed with live desktop window
 python3 infer_video.py 0 --show
-
-# 4. Live CCTV / IP Camera RTSP Stream
-python3 infer_video.py rtsp://username:password@192.168.1.100:554/live --show
 ```
-The script writes a new `.mp4` video with marked bounding boxes, confidence tags, and a live analytical Heads-Up Display (HUD) banner at the top of each frame.
+
+### Step 5: Launch 24/7 FastAPI CCTV Streaming Server
+Start the real-time background streaming server to ingest continuous camera feeds and broadcast modified live video over the web:
+
+```bash
+# 1. Stream from a live CCTV / IP Camera RTSP feed
+python3 stream_server.py --source rtsp://username:password@192.168.1.100:554/live
+
+# 2. Stream from local webcam
+python3 stream_server.py --source 0
+
+# 3. Stream from a test video in an infinite loop
+python3 stream_server.py --source input/12781687_1920_1080_30fps.mp4 --stride 2
+```
+
+Once running, access:
+* **Live Web Dashboard**: [http://localhost:8000/](http://localhost:8000/) (Real-time marked video feed + live KPI telemetry cards)
+* **Direct Video Stream (MJPEG)**: [http://localhost:8000/video_feed](http://localhost:8000/video_feed) (Embeddable in `<img src="/video_feed">` or VLC)
+* **Real-time Telemetry JSON API**: [http://localhost:8000/stats](http://localhost:8000/stats)
+* **Healthcheck**: [http://localhost:8000/health](http://localhost:8000/health)
 
 ---
 
