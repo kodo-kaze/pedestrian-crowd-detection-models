@@ -72,10 +72,15 @@ Image / Video Frame
    - [Stage 3: Random Forest Classifier & Benchmark Metrics](#stage-3-random-forest-classifier--benchmark-metrics)
    - [The V1 Operational Crowd Definition & Its Scope](#the-v1-operational-crowd-definition--its-scope)
    - [What V1 Can and Cannot Do](#what-v1-can-and-cannot-do)
-2. [Standalone Inference with `infer.py`](#2-standalone-inference-with-inferpy)
-   - [CLI Arguments & Usage](#cli-arguments--usage)
-   - [Sample Execution Output](#sample-execution-output)
-3. [The Foundation Dataset: CrowdHuman Deep Dive](#3-the-foundation-dataset-crowdhuman-deep-dive)
+2. [Inference Execution Interfaces](#2-inference-execution-interfaces)
+   - [Static Image Inference (`infer.py`)](#static-image-inference-inferpy)
+   - [Video & Stream Inference (`infer_video.py`)](#video--stream-inference-infer_videopy)
+   - [24/7 FastAPI Live CCTV Streaming Server (`stream_server.py`)](#247-fastapi-live-cctv-streaming-server-stream_serverpy)
+   - [Zero-Latency Player Integration (mpv & VLC)](#zero-latency-player-integration-mpv--vlc)
+3. [Comprehensive API Reference](#3-comprehensive-api-reference)
+   - [FastAPI Streaming Endpoints (`stream_server.py`)](#fastapi-streaming-endpoints-stream_serverpy)
+   - [Hugging Face Space Cloud API (`pcp-model-api`)](#hugging-face-space-cloud-api-pcp-model-api)
+4. [The Foundation Dataset: CrowdHuman Deep Dive](#4-the-foundation-dataset-crowdhuman-deep-dive)
    - [Overview & Research Motivation](#overview--research-motivation)
    - [Dataset Scale & Key Statistics](#dataset-scale--key-statistics)
    - [Deep Benchmark Comparison](#deep-benchmark-comparison)
@@ -86,14 +91,14 @@ Image / Video Frame
    - [Format Conversion Pipelines (YOLO, COCO, VOC)](#format-conversion-pipelines)
    - [Evaluation Metrics (mMR, AP, Recall)](#evaluation-metrics)
    - [How `crowdhuman_ml_dataset.csv` Was Generated](#how-crowdhuman_ml_datasetcsv-was-generated)
-4. [Evolutionary Roadmap: V2 → V3 → V4](#4-evolutionary-roadmap-v2--v3--v4)
+5. [Evolutionary Roadmap: V2 → V3 → V4](#5-evolutionary-roadmap-v2--v3--v4)
    - [V2: Density-Aware Crowd Detection](#v2--density-aware-crowd-detection)
    - [V3: Real-Time Crowd Tracking & Temporal Analysis](#v3--real-time-crowd-tracking--temporal-analysis)
    - [V4: Advanced Crowd Intelligence & Risk Detection](#v4--advanced-crowd-intelligence--risk-detection)
    - [V1 → V4 Capabilities Comparison Matrix](#v1--v4-capabilities-comparison-matrix)
-5. [Repository Structure](#5-repository-structure)
-6. [Installation & Quickstart Guide](#6-installation--quickstart-guide)
-7. [Citation & References](#7-citation--references)
+6. [Repository Structure](#6-repository-structure)
+7. [Installation & Quickstart Guide](#7-installation--quickstart-guide)
+8. [Citation & References](#8-citation--references)
 
 ---
 
@@ -269,46 +274,248 @@ Ground-truth people <  20  ──►  NOT-CROWD
 
 ---
 
-## 2. Standalone Inference with `infer.py`
+## 2. Inference Execution Interfaces
 
-Execute inference on any still image via the standalone script:
+The framework provides three specialized runtime environments tailored for different operational scenarios:
+
+```text
+┌─────────────────────────┐   ┌──────────────────────────┐   ┌──────────────────────────────┐
+│        infer.py         │   │      infer_video.py      │   │       stream_server.py       │
+│  Static Image Analysis  │   │  Video & File Processor  │   │   24/7 Live CCTV Broadcaster │
+│ (Single-frame analytics)│   │ (MP4 output + HUD overlay│   │(FastAPI, Web Dashboard, MJPEG│
+└─────────────────────────┘   └──────────────────────────┘   └──────────────────────────────┘
+```
+
+---
+
+### Static Image Inference (`infer.py`)
+
+Executes single-frame inference on still images, extracting all 21 scene features and outputting console metrics alongside marked bounding box images.
 
 ```bash
 # Basic usage
 python3 infer.py <path_to_image>
 
 # Example
-python3 infer.py input/station_platform.jpg
+python3 infer.py input/pexels-david-gracia-242488507-12334707.jpg
 ```
 
-### Sample Execution Output:
-
+#### Sample Execution Output:
 ```text
 ===========================================================================
  FINAL PREDICTION
 ===========================================================================
 
-Image                 : station_platform.jpg
-Detected people       : 55
-Average confidence    : 0.7421
-People / megapixel    : 48.12
-Nearest-neighbor      : 0.0418
+Image                 : pexels-david-gracia-242488507-12334707.jpg
+Detected people       : 42
+Average confidence    : 0.7814
+People / megapixel    : 34.62
+Nearest-neighbor      : 0.0389
 
-NOT-CROWD probability : 10.67%
-CROWD probability     : 89.33%
+NOT-CROWD probability : 8.42%
+CROWD probability     : 91.58%
 
 Prediction            : CROWD
 
 ===========================================================================
-
-✅ Annotated image saved:
-   output/station_platform_prediction.jpg
+Annotated image saved: output/pexels-david-gracia-242488507-12334707_prediction.jpg
 ===========================================================================
 ```
 
 ---
 
-## 3. The Foundation Dataset: CrowdHuman Deep Dive
+### Video & Stream Inference (`infer_video.py`)
+
+Processes video files, local webcams, or IP camera RTSP streams frame-by-frame, rendering bounding boxes and a semi-transparent analytical Heads-Up Display (HUD) banner, exporting the result to a marked `.mp4` video.
+
+```bash
+# 1. Process video file (saves marked video to output/<source>_marked.mp4)
+python3 infer_video.py input/sample_crowd.mp4
+
+# 2. Process with frame stride (skip every 2nd frame for 50% compute savings)
+python3 infer_video.py input/sample_crowd.mp4 --stride 2
+
+# 3. Live webcam with desktop GUI window (press 'q' to quit)
+python3 infer_video.py 0 --show
+
+# 4. Ingest live CCTV RTSP feed
+python3 infer_video.py rtsp://admin:password@192.168.1.100:554/live --show
+```
+
+#### Key Capabilities:
+* **Anti-Flicker Temporal Moving Average**: Uses a rolling 10-frame probability buffer to prevent label flickering when individuals are momentarily occluded.
+* **Analytical Glassmorphism HUD**: Overlays a top analytical bar displaying dynamic status (`[CROWD ALERT]` in red vs `[NORMAL DENSITY]` in green), probability gauge bar, count, density per megapixel, and real-time processing FPS.
+* **Smart Stride Subsampling**: Allows 15 FPS or 10 FPS processing (`--stride 2` or `--stride 3`) for a 50%–70% reduction in GPU/CPU consumption.
+
+---
+
+### 24/7 FastAPI Live CCTV Streaming Server (`stream_server.py`)
+
+A production-grade, asynchronous streaming server designed for continuous 24/7 CCTV ingestion and multi-client web broadcasting.
+
+```bash
+# 1. Start server with live CCTV RTSP feed
+python3 stream_server.py --source rtsp://admin:password@192.168.1.100:554/live
+
+# 2. Start server with local webcam
+python3 stream_server.py --source 0
+
+# 3. Start server with test video in an infinite loop
+python3 stream_server.py --source input/12781687_1920_1080_30fps.mp4 --stride 2
+```
+
+#### Streaming Architecture:
+* **Decoupled Capture Worker (`RTSPCameraStream`)**: Runs in an isolated background thread, constantly reading and overwriting a single `latest_frame` buffer. This guarantees that RTSP network queues never build up lag, keeping delay strictly under 150 ms.
+* **Broadcast Engine (`CrowdStreamBroadcaster`)**: Performs inference and annotation once, broadcasting the resulting stream to unlimited connected clients without multiplying GPU compute.
+* **Automatic Reconnect**: Seamlessly re-establishes dropped RTSP streams if network connectivity flickers.
+
+---
+
+### Zero-Latency Player Integration (mpv & VLC)
+
+Media players (like VLC and mpv) default to building large network buffers (10–30 seconds) for streaming URLs. To achieve sub-100ms real-time synchronization:
+
+#### Using `mpv` (Recommended):
+```bash
+mpv --profile=low-latency --untimed http://localhost:8000/video_feed
+```
+* `--profile=low-latency`: Disables demuxer caching and drops the buffer to 4KB.
+* `--untimed`: Disables clock/timestamp synchronization, rendering every JPEG packet immediately upon network arrival.
+
+#### Using `VLC`:
+```bash
+vlc http://localhost:8000/video_feed
+```
+*(In VLC GUI: Media &rarr; Open Network Stream &rarr; Enter `http://localhost:8000/video_feed` &rarr; Play)*
+
+---
+
+## 3. Comprehensive API Reference
+
+### FastAPI Streaming Endpoints (`stream_server.py`)
+
+The streaming server exposes four REST/Streaming endpoints:
+
+| Endpoint | HTTP Method | Response Content-Type | Description |
+| :--- | :---: | :--- | :--- |
+| **`/`** | `GET` | `text/html` | Real-time dark-mode web monitoring dashboard with embedded video and live KPI cards. |
+| **`/video_feed`** | `GET` | `multipart/x-mixed-replace` | Continuous MJPEG stream compatible with `<img>` tags, VLC, and mpv. |
+| **`/stats`** | `GET` | `application/json` | Real-time JSON telemetry payload for external automation and alert systems. |
+| **`/health`** | `GET` | `application/json` | Container/process healthcheck endpoint. |
+
+#### 1. Live Telemetry Endpoint: `GET /stats`
+
+##### Response Schema:
+```json
+{
+  "status": "CROWD ALERT",
+  "is_crowd": true,
+  "crowd_probability": 0.8924,
+  "people_count": 19,
+  "density_per_megapixel": 14.82,
+  "nearest_neighbor_distance": 0.0381,
+  "fps": 31.4,
+  "camera_connected": true,
+  "uptime_seconds": 240
+}
+```
+
+##### Field Definitions:
+* `status` *(string)*: Operational classification state (`NORMAL` or `CROWD ALERT`).
+* `is_crowd` *(boolean)*: True if smoothed crowd probability $\ge 0.50$.
+* `crowd_probability` *(float)*: 10-frame smoothed Random Forest confidence score `[0.0 - 1.0]`.
+* `people_count` *(integer)*: Instantaneous count of detected individuals in the latest frame.
+* `density_per_megapixel` *(float)*: Normalized density (people per $1,000,000$ pixels).
+* `nearest_neighbor_distance` *(float)*: Normalized average Euclidean distance between nearest individuals.
+* `fps` *(float)*: Real-time inference throughput speed.
+* `camera_connected` *(boolean)*: Connection state of the RTSP/webcam capture thread.
+* `uptime_seconds` *(integer)*: Server elapsed running time in seconds.
+
+#### 2. Live Web Dashboard: `GET /`
+Serves a self-contained, responsive web interface:
+* Embedded `<img src="/video_feed" />` displaying the live stream with sub-50ms latency.
+* Client-side polling of `/stats` every 500ms to update KPI metrics dynamically without full-page reloads.
+
+---
+
+### Hugging Face Space Cloud API (`pcp-model-api`)
+
+Live Deployment: [huggingface.co/spaces/bimbok/pcp-model-api](https://huggingface.co/spaces/bimbok/pcp-model-api)
+
+The Hugging Face deployment provides both interactive web tabs and programmatic REST endpoints powered by Gradio 6 and ZeroGPU.
+
+#### 1. Image Classification Endpoint: `POST /predict`
+
+Analyzes an uploaded image, runs the full 21-feature extraction pipeline, and returns annotated imagery and classification metrics.
+
+##### Python Client Integration:
+```python
+from gradio_client import Client, handle_file
+
+client = Client("bimbok/pcp-model-api")
+result = client.predict(
+    image=handle_file("path/to/crowd.jpg"),
+    conf_threshold=0.25,
+    iou_threshold=0.70,
+    api_name="/predict"
+)
+
+# Unpack response
+annotated_img_path, probabilities, summary_markdown, payload = result
+print(f"Prediction: {payload['prediction']}")
+print(f"Detected People: {payload['metrics']['detected_people']}")
+```
+
+##### Parameters:
+* `image` *(filepath/URL)*: Path to input image file.
+* `conf_threshold` *(float, default: 0.25)*: YOLO person detection confidence cutoff `[0.05 - 0.95]`.
+* `iou_threshold` *(float, default: 0.70)*: Non-Maximum Suppression (NMS) IoU threshold `[0.10 - 0.95]`.
+
+##### Returns:
+* `annotated_image` *(filepath)*: Path to rendered image containing bounding boxes.
+* `probabilities` *(dict)*: `{"CROWD": float, "NOT-CROWD": float}`.
+* `summary_markdown` *(string)*: Markdown table summarizing key metrics.
+* `payload` *(dict)*: Full structured JSON containing:
+  * `prediction`: `"CROWD"` or `"NOT-CROWD"`.
+  * `metrics`: `detected_people`, `people_per_megapixel`, `avg_confidence`, `avg_nearest_neighbor_dist`, `total_bbox_area_ratio`.
+  * `all_21_features`: Complete 21-dimensional feature dictionary.
+  * `boxes`: Array of detected bounding boxes `[x1, y1, x2, y2]` with confidence scores.
+
+#### 2. Video Processing Endpoint: `POST /predict_video`
+
+Processes an uploaded video file, annotates every frame with bounding boxes and the top analytical HUD, and returns an H.264/MP4 web-playable video.
+
+##### Python Client Integration:
+```python
+from gradio_client import Client, handle_file
+
+client = Client("bimbok/pcp-model-api")
+result = client.predict(
+    video_path=handle_file("path/to/footage.mp4"),
+    conf_threshold=0.25,
+    iou_threshold=0.70,
+    stride=2,
+    api_name="/predict_video"
+)
+
+marked_video_path, summary_markdown = result
+print(f"Annotated video saved at: {marked_video_path}")
+print(summary_markdown)
+```
+
+##### Parameters:
+* `video_path` *(filepath/URL)*: Path to input video file (`.mp4`, `.avi`, `.mov`).
+* `conf_threshold` *(float, default: 0.25)*: Detection confidence cutoff.
+* `iou_threshold` *(float, default: 0.70)*: NMS IoU threshold.
+* `stride` *(integer, default: 2)*: Frame subsampling stride (e.g., `2` processes every 2nd frame for 2x speed).
+
+##### Returns:
+* `marked_video` *(filepath)*: Web-compatible H.264 `.mp4` video with bounding boxes and HUD banner.
+* `summary_markdown` *(string)*: Markdown table detailing total frames, peak people count, mean density, crowd duration percentage, and processing speed (FPS).
+
+---
+
+## 4. The Foundation Dataset: CrowdHuman Deep Dive
 
 The entire training regime is backed by the [**CrowdHuman Dataset**](https://huggingface.co/datasets/sshao0516/CrowdHuman) (Shao et al., 2018 — Megvii Technology / Face++).
 
@@ -561,7 +768,7 @@ Located at [`datasets/crowdhuman_ml_dataset.csv`](file:///home/bimbok/shared/cod
 
 ---
 
-## 4. Evolutionary Roadmap: V2 → V3 → V4
+## 5. Evolutionary Roadmap: V2 → V3 → V4
 
 ### 🔵 V2 — Density-Aware Crowd Detection
 
@@ -725,7 +932,7 @@ Located at [`datasets/crowdhuman_ml_dataset.csv`](file:///home/bimbok/shared/cod
 
 ---
 
-## 5. Repository Structure
+## 6. Repository Structure
 
 ```
 .
@@ -754,7 +961,7 @@ Located at [`datasets/crowdhuman_ml_dataset.csv`](file:///home/bimbok/shared/cod
 
 ---
 
-## 6. Installation & Quickstart Guide
+## 7. Installation & Quickstart Guide
 
 ### Step 1: Environment Setup
 ```bash
@@ -812,7 +1019,7 @@ Once running, access:
 
 ---
 
-## 7. Citation & References
+## 8. Citation & References
 
 ```bibtex
 @article{shao2018crowdhuman,
